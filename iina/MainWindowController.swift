@@ -58,7 +58,7 @@ class MainWindowController: PlayerWindowController {
   override var videoView: VideoView {
     return _videoView
   }
-  
+
   lazy private var _videoView: VideoView = VideoView(frame: window!.contentView!.bounds, player: player)
 
   /** The quick setting sidebar (video, audio, subtitles). */
@@ -104,7 +104,7 @@ class MainWindowController: PlayerWindowController {
   var pipStatus = PIPStatus.notInPIP
   var isInInteractiveMode: Bool = false
   var isVideoLoaded: Bool = false
-  
+
   var isWindowHidden: Bool = false
   var isWindowMiniaturizedDueToPip = false
 
@@ -801,7 +801,7 @@ class MainWindowController: PlayerWindowController {
       }
 
       guard !isMouseEvent(event, inAnyOf: [sideBarView, currentControlBar, titleBarView, subPopoverView]) else { return }
-      
+
       super.mouseUp(with: event)
     }
   }
@@ -1120,7 +1120,7 @@ class MainWindowController: PlayerWindowController {
     }
 
     updateWindowParametersForMPV()
-    
+
     // Exit PIP if necessary
     if pipStatus == .inPIP,
       #available(macOS 10.12, *) {
@@ -1212,7 +1212,7 @@ class MainWindowController: PlayerWindowController {
       return
     }
   }
-  
+
   private func restoreDockSettings() {
     NSApp.presentationOptions.remove(.autoHideMenuBar)
     NSApp.presentationOptions.remove(.autoHideDock)
@@ -1342,6 +1342,8 @@ class MainWindowController: PlayerWindowController {
       controlBarFloating.xConstraint.constant = xPos
       controlBarFloating.yConstraint.constant = yPos
     }
+
+    player.events.emit(.windowResized, data: window.frame)
   }
 
   // resize framebuffer in videoView after resizing.
@@ -1359,6 +1361,14 @@ class MainWindowController: PlayerWindowController {
   }
 
   // MARK: - Window delegate: Activeness status
+  func windowDidMove(_ notification: Notification) {
+    guard let window = window else { return }
+    player.events.emit(.windowMoved, data: window.frame)
+  }
+
+  func windowDidChangeScreen(_ notification: Notification) {
+    videoView.updateDisplayLink()
+  }
 
   func windowDidBecomeKey(_ notification: Notification) {
     window!.makeFirstResponder(window!)
@@ -1402,7 +1412,7 @@ class MainWindowController: PlayerWindowController {
       player.pause()
     }
   }
-  
+
   func windowDidMiniaturize(_ notification: Notification) {
     if Preference.bool(for: .togglePipByMinimizingWindow) && !isWindowMiniaturizedDueToPip {
       if #available(macOS 10.12, *) {
@@ -2480,6 +2490,8 @@ extension MainWindowController: PIPViewControllerDelegate {
         player.pause()
       }
     }
+
+    player.events.emit(.pipChanged, data: true)
   }
 
   func exitPIP() {
@@ -2491,13 +2503,14 @@ extension MainWindowController: PIPViewControllerDelegate {
       // is chosen in this case. See https://bugs.swift.org/browse/SR-8956.
       pip.dismiss(pipVideo!)
     }
+    player.events.emit(.pipChanged, data: false)
   }
 
   func doneExitingPIP() {
     if isWindowHidden {
       window?.makeKeyAndOrderFront(self)
     }
-    
+
     pipStatus = .notInPIP
 
     addVideoViewToWindow()
@@ -2509,9 +2522,9 @@ extension MainWindowController: PIPViewControllerDelegate {
     if player.info.isPaused {
       videoView.videoLayer.draw(forced: true)
     }
-    
+
     updateTimer()
-    
+
     isWindowMiniaturizedDueToPip = false
     isWindowHidden = false
   }
@@ -2519,7 +2532,7 @@ extension MainWindowController: PIPViewControllerDelegate {
   func pipShouldClose(_ pip: PIPViewController) -> Bool {
     // This is called right before we're about to close the PIP
     pipStatus = .intermediate
-    
+
     // Hide the overlay view preemptively, to prevent any issues where it does
     // not hide in time and ends up covering the video view (which will be added
     // to the window under everything else, including the overlay).
